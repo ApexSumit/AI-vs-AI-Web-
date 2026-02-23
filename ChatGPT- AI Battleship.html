@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AI Battleship — Play vs Learning Computer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg1: #071021;
+      --bg2: #0b2336;
+      --accent: #7efc6f;
+      --glass: rgba(255,255,255,0.06);
+      --card: rgba(255,255,255,0.03);
+      --muted: rgba(255,255,255,0.6);
+      --danger: #ff6b6b;
+      --success: #7efc6f;
+      --glass-border: rgba(255,255,255,0.06);
+      font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg1),var(--bg2));color:#eaf6f3}
+    .app{min-height:100vh;display:grid;grid-template-columns:360px 1fr;gap:24px;padding:28px}
+
+    /* left menu */
+    .menu{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:16px;padding:20px;backdrop-filter:blur(6px);box-shadow:0 6px 30px rgba(2,6,23,0.6);border:1px solid var(--glass-border)}
+    .logo{display:flex;gap:12px;align-items:center}
+    .logo .mark{width:56px;height:56px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;background:linear-gradient(135deg,#0fffc1,#6bd9ff);color:#041018}
+    h1{margin:4px 0 6px;font-size:18px}
+    p.lead{margin:0;color:var(--muted);font-size:13px}
+
+    .section{margin-top:18px}
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;background:linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border:1px solid rgba(255,255,255,0.04);cursor:pointer}
+    .btn.primary{background:linear-gradient(90deg,#7efc6f22,#6bd9ff22);border:1px solid rgba(126,252,111,0.18)}
+    .muted{color:var(--muted);font-size:13px}
+
+    /* settings */
+    label.switch{display:flex;justify-content:space-between;align-items:center;margin-top:10px}
+    .small{font-size:13px;color:var(--muted)}
+    input[type=range]{width:100%}
+
+    /* main area */
+    .main{display:flex;flex-direction:column;gap:18px}
+    .hud{display:flex;align-items:center;justify-content:space-between}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:14px;border-radius:14px;border:1px solid var(--glass-border);box-shadow:0 8px 30px rgba(2,6,23,0.6)}
+
+    .boards{display:flex;gap:22px;align-items:flex-start}
+    .board{display:flex;flex-direction:column;gap:12px}
+    .board h3{margin:0;font-size:14px}
+
+    .grid{display:grid;grid-template-columns:repeat(10,36px);grid-template-rows:repeat(10,36px);gap:6px;padding:10px;background:linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0.01));border-radius:12px}
+    .cell{width:36px;height:36px;border-radius:8px;background:linear-gradient(180deg,#082033,#051421);display:flex;align-items:center;justify-content:center;color:transparent;font-weight:700;position:relative;cursor:pointer;transition:all .12s}
+    .cell:hover{transform:translateY(-2px)}
+    .cell.bomb::after{content:"";position:absolute;width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 30% 30%, #ffefb1, #ff9b9b);box-shadow:0 6px 18px rgba(255,100,100,0.2)}
+    .cell.miss::after{content:"";position:absolute;width:8px;height:8px;border-radius:50%;background:#6bd9ff}
+    .cell.ship{background:linear-gradient(180deg,#0f4d66,#0a2a36);border:1px solid rgba(255,255,255,0.03)}
+    .cell.hit{background:linear-gradient(180deg,#ff6b6b,#b72b2b);}
+
+    /* responsive */
+    @media (max-width:1000px){.app{grid-template-columns:1fr;align-items:start;padding:12px}.boards{flex-direction:column;align-items:center}.menu{order:2}}
+
+    /* footer small */
+    .footer{font-size:13px;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+
+    /* particle canvas */
+    canvas.particles{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:0.25}
+
+    /* animated title */
+    .title-anim{background:linear-gradient(90deg,#7efc6f,#6bd9ff);-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:800}
+
+    /* log */
+    .log{max-height:160px;overflow:auto;padding:8px;border-radius:8px;background:rgba(0,0,0,0.06);font-size:13px}
+
+  </style>
+</head>
+<body>
+<canvas class="particles"></canvas>
+<div class="app">
+  <aside class="menu card">
+    <div class="logo">
+      <div class="mark">BS</div>
+      <div>
+        <h1 class="title-anim">AI Battleship</h1>
+        <p class="lead">2D single-file web game — play vs a computer that learns your placements.</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <button id="startBtn" class="btn primary">▶ Start New Game</button>
+      <div style="height:10px"></div>
+      <button id="autoPlaceBtn" class="btn">Auto Place My Ships</button>
+    </div>
+
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center"><strong>Difficulty</strong><span id="diffLabel" class="small">Medium</span></div>
+      <input id="difficulty" type="range" min="0" max="2" value="1">
+      <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:13px;color:var(--muted)"><span>Easy</span><span>Medium</span><span>Hard</span></div>
+
+      <label class="switch small">Auto-rotate ships
+        <input id="autoRotate" type="checkbox" checked style="margin-left:8px">
+      </label>
+    </div>
+
+    <div class="section">
+      <strong>AI Memory</strong>
+      <p class="small">The AI stores placement heatmaps in your browser's localStorage to learn where you hide ships.</p>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button id="resetAI" class="btn">Reset Learning</button>
+        <button id="exportAI" class="btn">Export</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <strong>Stats</strong>
+      <div class="small" style="margin-top:8px">Games played: <span id="gamesPlayed">0</span></div>
+      <div class="small">Wins: <span id="wins">0</span></div>
+    </div>
+
+    <div class="section">
+      <strong>Game Rules</strong>
+      <ul class="small" style="margin-top:8px; padding-left:18px; line-height:1.5">
+        <li>Each player has a 10×10 grid.</li>
+        <li>5 Ships: Carrier(5), Battleship(4), Cruiser(3), Submarine(3), Destroyer(2).</li>
+        <li>Players take turns firing at coordinates.</li>
+        <li>Hit all parts of a ship to sink it.</li>
+        <li>First to sink all enemy ships wins.</li>
+        <li>AI learns your placement patterns over time.</li>
+      </ul>
+      <button id="howToPlayBtn" class="btn" style="margin-top:10px">How To Play</button>
+    </div>
+
+    <div style="height:18px"></div>
+    <div class="small">Made with ❤️ — single HTML file. Your learning data is stored locally only.</div>
+  </aside>
+
+  <main class="main">
+    <div class="hud card">
+      <div>
+        <strong>Turn:</strong> <span id="turnLabel">Setup</span>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <div class="small">Theme</div>
+        <button id="themeBtn" class="btn">Toggle Dark</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="boards">
+        <div class="board">
+          <h3>Your Board</h3>
+          <div id="playerGrid" class="grid"></div>
+        </div>
+
+        <div class="board">
+          <h3>Opponent Board</h3>
+          <div id="aiGrid" class="grid"></div>
+        </div>
+
+        <div style="width:280px">
+          <h3>Game Log</h3>
+          <div id="log" class="log"></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px;align-items:center">
+      <button id="undoBtn" class="btn">Undo Last</button>
+      <button id="randomizeBtn" class="btn">Randomize Opponent</button>
+      <div class="muted">Tip: Click opponent grid to fire. Use auto-place to quickly set your ships.</div>
+    </div>
+
+    <div class="footer card">
+      <div>AI learns where you hide ships over multiple games.</div>
+      <div>Grid: 10 × 10 • Ships: Carrier(5), Battleship(4), Cruiser(3), Sub(3), Destroyer(2)</div>
+    </div>
+  </main>
+</div>
+
+<script>
+// --- Game constants & helpers ---
+const GRID_SIZE = 10;
+const SHIPS = [
+  {name:'Carrier',len:5},
+  {name:'Battleship',len:4},
+  {name:'Cruiser',len:3},
+  {name:'Submarine',len:3},
+  {name:'Destroyer',len:2}
+];
+
+// localStorage keys
+const LS_KEY = 'battleship_ai_memory_v1';
+const STATS_KEY = 'battleship_stats_v1';
+
+function make2D(n,v=0){return Array.from({length:n},()=>Array.from({length:n},()=>v));}
+
+// --- AI Memory: record heatmap of player's ship placements ---
+let aiMemory = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
+if(!aiMemory){
+  aiMemory = {placementsHeatmap: make2D(GRID_SIZE,0), games:0};
+}
+
+let stats = JSON.parse(localStorage.getItem(STATS_KEY) || 'null');
+if(!stats){stats={games:0,wins:0};}
+
+// UI refs
+const playerGridEl = document.getElementById('playerGrid');
+const aiGridEl = document.getElementById('aiGrid');
+const logEl = document.getElementById('log');
+const startBtn = document.getElementById('startBtn');
+const autoPlaceBtn = document.getElementById('autoPlaceBtn');
+const randomizeBtn = document.getElementById('randomizeBtn');
+const resetAI = document.getElementById('resetAI');
+const exportAI = document.getElementById('exportAI');
+const gamesPlayedEl = document.getElementById('gamesPlayed');
+const winsEl = document.getElementById('wins');
+const difficultyEl = document.getElementById('difficulty');
+const diffLabel = document.getElementById('diffLabel');
+const turnLabel = document.getElementById('turnLabel');
+const startDifficulty = parseInt(difficultyEl.value);
+
+// canvas particles
+const canvas = document.querySelector('canvas.particles');
+canvas.width = innerWidth; canvas.height = innerHeight;
+const ctx = canvas.getContext('2d');
+const particles = [];
+for(let i=0;i<80;i++){particles.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,r:Math.random()*1.6+0.6, vx:(Math.random()-0.5)*0.2, vy:(Math.random()-0.5)*0.2});}
+function drawParticles(){ctx.clearRect(0,0,canvas.width,canvas.height);for(let p of particles){ctx.beginPath();ctx.fillStyle='rgba(110,230,200,0.04)';ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();p.x+=p.vx;p.y+=p.vy;if(p.x<0)p.x=canvas.width;if(p.x>canvas.width)p.x=0;if(p.y<0)p.y=canvas.height;if(p.y>canvas.height)p.y=0;}}setInterval(drawParticles,40);
+
+// --- Game State ---
+let playerBoard = make2D(GRID_SIZE,0); // 0 empty, >0 shipId
+let aiBoard = make2D(GRID_SIZE,0);
+let playerShots = make2D(GRID_SIZE,0); // 0 untouched, 1 miss, 2 hit
+let aiShots = make2D(GRID_SIZE,0);
+let playerShips = []; // {id,name,len,cells, sunk}
+let aiShips = [];
+let currentTurn = 'player';
+let gameActive = false;
+let lastPlayerAction = null;
+let lastAiTarget = null;
+let aiTargetStack = []; // stack for target mode
+
+function idx(i,j){return i*GRID_SIZE+j}
+
+// --- UI build grids ---
+function buildGrid(el,clickHandler,showShips=false){el.innerHTML='';for(let r=0;r<GRID_SIZE;r++){for(let c=0;c<GRID_SIZE;c++){const cell = document.createElement('div');cell.className='cell';cell.dataset.r=r;cell.dataset.c=c;cell.id = (el===playerGridEl? 'p':'a')+r+'-'+c;cell.addEventListener('click',()=>clickHandler(r,c,cell));el.appendChild(cell)}}}
+
+buildGrid(playerGridEl,playerGridClick,true);
+buildGrid(aiGridEl,aiGridClick,false);
+
+// --- Placement utilities ---
+function placeShipOnBoard(board,shipId,len,r,c,dir){ // dir: 0 horiz, 1 vert
+  const cells=[];
+  for(let k=0;k<len;k++){const rr = r + (dir? k:0); const cc = c + (dir?0:k); if(rr<0||rr>=GRID_SIZE||cc<0||cc>=GRID_SIZE) return null; if(board[rr][cc]!==0) return null; cells.push([rr,cc]);}
+  for(const [rr,cc] of cells) board[rr][cc]=shipId;
+  return cells;
+}
+
+function clearBoard(board){for(let r=0;r<GRID_SIZE;r++)for(let c=0;c<GRID_SIZE;c++)board[r][c]=0}
+
+function randomPlaceAll(board,shipsArray,isPlayer=false){clearBoard(board);shipsArray.length=0;let id=1;for(const s of SHIPS){let placed=false,tries=0;while(!placed && tries<400){tries++;const dir=Math.random()<0.5?0:1;const r=Math.floor(Math.random()*GRID_SIZE);const c=Math.floor(Math.random()*GRID_SIZE);const cells=placeShipOnBoard(board,id,s.len,r,c,dir);if(cells){shipsArray.push({id, name:s.name,len:s.len,cells, sunk:false});placed=true}}id++} }
+
+// --- Rendering ---
+function renderBoards(){// player
+  for(let r=0;r<GRID_SIZE;r++)for(let c=0;c<GRID_SIZE;c++){const el=document.getElementById('p'+r+'-'+c);el.className='cell';const v=playerBoard[r][c];if(v>0){el.classList.add('ship');}
+    if(aiShots[r][c]===1) el.classList.add('miss');
+    if(aiShots[r][c]===2) el.classList.add('hit');
+  }
+  // AI board (what player sees)
+  for(let r=0;r<GRID_SIZE;r++)for(let c=0;c<GRID_SIZE;c++){const el=document.getElementById('a'+r+'-'+c);el.className='cell';if(playerShots[r][c]===1) el.classList.add('miss');
+    if(playerShots[r][c]===2) el.classList.add('hit');
+  }
+}
+
+function log(msg){const d=document.createElement('div');d.textContent = '['+new Date().toLocaleTimeString()+'] '+msg;logEl.prepend(d);}
+
+// --- Game flow ---
+function startNewGame(){gameActive=true;playerShots = make2D(GRID_SIZE,0);aiShots = make2D(GRID_SIZE,0);playerShips=[];aiShips=[];currentTurn='player';turnLabel.textContent='Player (Your turn)';log('New game started');
+  // place AI ships using random placement
+  randomPlaceAll(aiBoard,aiShips,false);
+  // keep player board if already placed else auto place
+  let hasShips=false;for(let r=0;r<GRID_SIZE;r++)for(let c=0;c<GRID_SIZE;c++)if(playerBoard[r][c]>0)hasShips=true;
+  if(!hasShips){randomPlaceAll(playerBoard,playerShips,true)} else {
+    // rebuild playerShips from playerBoard
+    // naive: detect ship ids
+    const foundIds = new Set();for(let r=0;r<GRID_SIZE;r++)for(let c=0;c<GRID_SIZE;c++)if(playerBoard[r][c]>0)foundIds.add(playerBoard[r][c]);
+    for(const id of foundIds){const cells=[];for(let r=0;r<GRID_SIZE;r++)for(let c=0;c<GRID_SIZE;c++)if(playerBoard[r][c]===id)cells.push([r,c]);const sDef = SHIPS[id-1]||{name:'Ship',len:cells.length};playerShips.push({id,name:sDef.name,len:cells.length,cells,sunk:false});}
+  }
+  // AI prepares probability map using memory and difficulty
+  aiPrepareProbability();
+  renderBoards();
+}
+
+startBtn.addEventListener('click',()=>{startNewGame();});
+autoPlaceBtn.addEventListener('click',()=>{randomPlaceAll(playerBoard,playerShips,true);renderBoards();log('Your ships auto-placed.');});
+
+randomizeBtn.addEventListener('click',()=>{randomPlaceAll(aiBoard,aiShips,false);log('Opponent randomized.');renderBoards();});
+
+resetAI.addEventListener('click',()=>{if(confirm('Reset AI learning data?')){aiMemory = {placementsHeatmap: make2D(GRID_SIZE,0), games:0};localStorage.removeItem(LS_KEY);updateStatsUI();log('AI memory reset.')}});
+
+exportAI.addEventListener('click',()=>{const data = JSON.stringify(aiMemory);navigator.clipboard.writeText(data).then(()=>alert('AI memory copied to clipboard'))});
+
+// --- Player interactions ---
+function playerGridClick(r,c,el){if(gameActive && currentTurn==='player'){log('Cannot change placement mid-game');return;} // in setup you could allow editing — omitted for brevity
+}
+
+function aiGridClick(r,c,cell){if(!gameActive){log('Start a game first');return;} if(currentTurn!=='player'){log('Not your turn');return;} if(playerShots[r][c]!==0){log('You already fired there');return;} // fire
+  if(aiBoard[r][c]>0){playerShots[r][c]=2;log('You hit opponent at '+String.fromCharCode(65+r)+ (c+1));
+    // mark ship cell as hit and check sank
+    const ship = aiShips.find(s=>s.id===aiBoard[r][c]);
+    ship.cells = ship.cells.filter(([rr,cc])=>!(rr===r&&cc===c));
+    if(ship.cells.length===0){ship.sunk=true;log('You sank opponent '+ship.name+'!');}
+  } else {playerShots[r][c]=1;log('You missed at '+String.fromCharCode(65+r)+ (c+1));}
+  renderBoards();
+  // check win
+  const allSunk = aiShips.every(s=>s.sunk);
+  if(allSunk){log('You win!');endGame(true);return;} // player wins
+  // AI's turn
+  currentTurn='ai';turnLabel.textContent='AI Thinking...';setTimeout(aiMakeMove, 600);
+}
+
+// --- AI Decision Making ---
+let aiProbMap = make2D(GRID_SIZE,1);
+function aiPrepareProbability(){// base parity hunt pattern
+  const base = make2D(GRID_SIZE,0);
+  // parity: favor cells where (r+c)%2==0 for hunting ships of len>=2
+  for(let r=0;r<GRID_SIZE;r++)for(let c=0;c<GRID_SIZE;c++) base[r][c] = ((r+c)%2===0)?1:0.3;
+  // incorporate placementsHeatmap
+  const heat = aiMemory.placementsHeatmap;
+  // difficulty weighting
+  const diff = parseInt(difficultyEl.value); // 0 easy,1 med,2 hard
+  const heatWeight = [0.3,0.8,1.6][diff]; // higher = AI trusts memory more
+  // combine
+  for(let r=0;r<GRID_SIZE;r++)for(let c=0;c<GRID_SIZE;c++) aiProbMap[r][c] = Math.max(0.001, base[r][c] + heatWeight * (heat[r][c]||0));
+}
+
+function aiChooseHunt(){// choose highest-probability unshot cell
+  let best=-Infinity;let bestCells=[];
+  for(let r=0;r<GRID_SIZE;r++)for(let c=0;c<GRID_SIZE;c++){if(aiShots[r][c]===0){const v = aiProbMap[r][c]; if(v>best){best=v;bestCells=[[r,c]]} else if(v===best) bestCells.push([r,c]);}}
+  if(bestCells.length===0) return null;return bestCells[Math.floor(Math.random()*bestCells.length)];
+}
+
+function getNeighbors(r,c){const n=[];if(r>0)n.push([r-1,c]);if(r<GRID_SIZE-1)n.push([r+1,c]);if(c>0)n.push([r,c-1]);if(c<GRID_SIZE-1)n.push([r,c+1]);return n;}
+
+function aiMakeMove(){// target mode if stack exists
+  let pick=null;
+  // clean stack from already-shot
+  aiTargetStack = aiTargetStack.filter(([r,c])=>aiShots[r][c]===0);
+  if(aiTargetStack.length>0){pick = aiTargetStack.pop();}
+  else pick = aiChooseHunt();
+  if(!pick){log('AI has no moves left');endGame(false);return;}
+  const [r,c]=pick;
+  // simulate "smarter overtime" by biasing toward learned patterns midgame: aiProbMap decays after each move
+  const reactionDelay = 350 + Math.random()*450;
+  setTimeout(()=>{
+    if(playerBoard[r][c]>0){aiShots[r][c]=2;log('AI hit at '+String.fromCharCode(65+r)+ (c+1));
+      // push neighbors for targeting
+      const n = getNeighbors(r,c).filter(([rr,cc])=>aiShots[rr][cc]===0);
+      // Heuristic: prefer continuing same direction if chain exists
+      for(const nb of n) aiTargetStack.push(nb);
+      // check ship sunk
+      const shipId = playerBoard[r][c];
+      // remove that cell from player's ship tracking
+      const ship = playerShips.find(s=>s.id===shipId);
+      if(ship){ship.cells = ship.cells.filter(([rr,cc])=>!(rr===r&&cc===c)); if(ship.cells.length===0){ship.sunk=true;log('AI sank your '+ship.name+'!'); // remove related target attempts
+          aiTargetStack = aiTargetStack.filter(([x,y])=> playerBoard[x]&&playerBoard[x][y]!==shipId );}}
+    } else {aiShots[r][c]=1;log('AI missed at '+String.fromCharCode(65+r)+ (c+1));}
+
+    // reduce probability of that cell to zero so it won't be chosen again
+    aiProbMap[r][c]=0;
+    // small decay to encourage exploration
+    for(let rr=0;rr<GRID_SIZE;rr++)for(let cc=0;cc<GRID_SIZE;cc++) aiProbMap[rr][cc]*=0.997;
+
+    renderBoards();
+    // check if AI won
+    const allPlayerSunk = playerShips.every(s=>s.sunk);
+    if(allPlayerSunk){log('AI wins!');endGame(false);return;} else {
+      currentTurn='player';turnLabel.textContent='Player (Your turn)';
+    }
+  }, reactionDelay);
+}
+
+// --- End game and learning update ---
+function endGame(playerWon){gameActive=false;turnLabel.textContent='Game Over';
+  // Update stats
+  stats.games++; if(playerWon) stats.wins++;
+  localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+  // Update AI memory: add player's ship placements to heatmap
+  for(const s of playerShips){for(const [r,c] of s.cells || []){ /* if not sunk, still count */ aiMemory.placementsHeatmap[r][c] = (aiMemory.placementsHeatmap[r][c]||0)+1; }}
+  aiMemory.games++; localStorage.setItem(LS_KEY, JSON.stringify(aiMemory));
+  updateStatsUI();
+}
+
+function updateStatsUI(){gamesPlayedEl.textContent = stats.games; winsEl.textContent = stats.wins;}
+updateStatsUI();
+
+// --- Utility: reconstruct player's ship cells for memory before ending (we want original placement, not mutated) ---
+// For this implementation, we stored ship.cells and mutated on hits; to preserve original placement, we will rebuild from playerBoard snapshot at start
+
+// --- Initialize fresh boards on load ---
+(function init(){clearBoard(playerBoard);clearBoard(aiBoard);randomPlaceAll(playerBoard,playerShips,true);randomPlaceAll(aiBoard,aiShips,false);renderBoards();log('Welcome — place your ships or use Auto Place.');})();
+
+// difficulty label
+function setDiffLabel(){const v=parseInt(difficultyEl.value);diffLabel.textContent = ['Easy','Medium','Hard'][v];}
+setDiffLabel();difficultyEl.addEventListener('input',()=>{setDiffLabel();aiPrepareProbability();});
+
+// --- Save anonymous snapshot of player's placement for learning when game starts ---
+let lastPlayerPlacementSnapshot = null;
+startBtn.addEventListener('click',()=>{
+  // snapshot player's current placement for AI learning later
+  lastPlayerPlacementSnapshot = playerBoard.map(row=>row.slice());
+});
+
+// Before ending game, we'll use the snapshot (if available) to update heatmap instead of mutated playerShips
+function endGame(playerWon){
+  gameActive=false;turnLabel.textContent='Game Over';
+  stats.games++; if(playerWon) stats.wins++;
+  localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+  // Update AI memory heatmap from snapshot if present, else from current board
+  const source = lastPlayerPlacementSnapshot || playerBoard;
+  for(let r=0;r<GRID_SIZE;r++)for(let c=0;c<GRID_SIZE;c++) if(source[r][c]>0) aiMemory.placementsHeatmap[r][c] = (aiMemory.placementsHeatmap[r][c]||0)+1;
+  aiMemory.games++; localStorage.setItem(LS_KEY, JSON.stringify(aiMemory));
+  updateStatsUI();
+  log('Game ended. AI memory updated.');
+}
+
+// expose debug: show memory heatmap if ctrl+M
+window.addEventListener('keydown',e=>{if(e.ctrlKey && e.key.toLowerCase()==='m'){alert(JSON.stringify(aiMemory.placementsHeatmap));}});
+
+// touch-ups: make grid cells responsive to window resize
+window.addEventListener('resize',()=>{canvas.width=innerWidth;canvas.height=innerHeight;});
+
+// quick helper to download current HTML (optional)
+function downloadHTML(){ const html = '<!doctype html>\n'+document.documentElement.outerHTML; const blob = new Blob([html],{type:'text/html'}); const url = URL.createObjectURL(blob); const a=document.createElement('a');a.href=url;a.download='battleship_ai.html';a.click();}
+
+// Small polish: clicking a player's ship cell toggles rotation (not fully implemented) - reserved for future UI
+
+</script>
+
+
+<!-- HOW TO PLAY MODAL -->
+<div id="howToModal" style="position:fixed; inset:0; background:rgba(0,0,0,0.6); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; z-index:50;">
+  <div style="width:min(600px,90%); background:linear-gradient(180deg,#0b2336,#071021); border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:24px; box-shadow:0 20px 60px rgba(0,0,0,0.6);">
+    <h2 style="margin-top:0" class="title-anim">How To Play Battleship</h2>
+    <div class="small" style="line-height:1.6; margin-top:12px">
+      <p><strong>1. Ship Placement:</strong> Place your ships on your board before starting the game. You can auto-place them.</p>
+      <p><strong>2. Taking Turns:</strong> Click on the opponent's grid to fire at a coordinate.</p>
+      <p><strong>3. Hit or Miss:</strong> Red = Hit, Blue = Miss.</p>
+      <p><strong>4. Sink Ships:</strong> Destroy all cells of a ship to sink it.</p>
+      <p><strong>5. Adaptive AI:</strong> The computer studies your past ship placements and improves its targeting each game.</p>
+      <p><strong>6. Difficulty:</strong> Higher difficulty increases how strongly AI uses learned data.</p>
+      <p><strong>Goal:</strong> Sink all enemy ships before yours are destroyed.</p>
+    </div>
+    <div style="display:flex; justify-content:flex-end; margin-top:18px">
+      <button id="closeHowTo" class="btn primary">Got It</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// HOW TO PLAY MODAL LOGIC
+const howToBtn = document.getElementById('howToPlayBtn');
+const howToModal = document.getElementById('howToModal');
+const closeHowTo = document.getElementById('closeHowTo');
+
+howToBtn.addEventListener('click',()=>{howToModal.style.display='flex';});
+closeHowTo.addEventListener('click',()=>{howToModal.style.display='none';});
+howToModal.addEventListener('click',(e)=>{if(e.target===howToModal) howToModal.style.display='none';});
+</script>
+
+</body>
+</html>

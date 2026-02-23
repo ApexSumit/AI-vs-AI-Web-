@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEON STRIKE: Battleship AI</title>
+    <style>
+        :root {
+            --bg: #0a0e14;
+            --panel: #161b22;
+            --accent: #00f2ff;
+            --hit: #ff3e3e;
+            --miss: #4a4e57;
+            --ship: #ffffff;
+            --text-dim: #8b949e;
+            --font-main: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg);
+            color: white;
+            font-family: var(--font-main);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        /* --- Menu System --- */
+        #ui-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 14, 20, 0.98);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            transition: opacity 0.4s ease;
+        }
+
+        .menu-card {
+            background: var(--panel);
+            padding: 2.5rem;
+            border-radius: 12px;
+            border: 1px solid var(--accent);
+            box-shadow: 0 0 40px rgba(0, 242, 255, 0.15);
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+
+        h1, h2 {
+            letter-spacing: 3px;
+            text-shadow: 0 0 10px var(--accent);
+            margin-top: 0;
+        }
+
+        h1 { font-size: 2.8rem; margin-bottom: 2rem; }
+        h2 { color: var(--accent); font-size: 1.4rem; border-bottom: 1px solid #30363d; padding-bottom: 10px; }
+
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            margin: 12px 0;
+            background: transparent;
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+
+        .btn:hover {
+            background: var(--accent);
+            color: var(--bg);
+            box-shadow: 0 0 20px var(--accent);
+        }
+
+        .btn-small { padding: 8px; font-size: 0.8rem; margin-top: 20px; }
+
+        /* --- Content Layouts --- */
+        .text-left { text-align: left; line-height: 1.6; color: var(--text-dim); }
+        .text-left strong { color: white; }
+        ul { padding-left: 20px; }
+        li { margin-bottom: 8px; }
+
+        /* --- Game Layout --- */
+        #game-container {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            width: 100%;
+            max-width: 1200px;
+        }
+
+        .boards-wrapper {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 10px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(10, 36px);
+            grid-template-rows: repeat(10, 36px);
+            gap: 2px;
+            background: #30363d;
+            padding: 4px;
+            border: 2px solid #30363d;
+        }
+
+        .cell {
+            width: 36px;
+            height: 36px;
+            background: var(--panel);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: crosshair;
+            transition: 0.2s;
+        }
+
+        .cell:hover { background: #21262d; border: 1px solid var(--accent); box-sizing: border-box; }
+
+        /* Ship styles */
+        .cell.ship { background: #3d444d; border: 1px solid #8b949e; }
+        .cell.hit { background: var(--hit) !important; animation: shake 0.3s; }
+        .cell.miss { background: var(--miss) !important; opacity: 0.5; }
+        .cell.miss::after { content: '•'; color: white; }
+
+        .status-bar {
+            margin: 15px 0;
+            padding: 12px 20px;
+            background: var(--panel);
+            border-radius: 4px;
+            width: 100%;
+            max-width: 800px;
+            display: flex;
+            justify-content: space-between;
+            border-left: 4px solid var(--accent);
+        }
+
+        .hidden { display: none !important; }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-2px); }
+            75% { transform: translateX(2px); }
+        }
+
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 10px; }
+    </style>
+</head>
+<body>
+
+    <div id="ui-overlay">
+        <div class="menu-card" id="main-menu">
+            <h1>NEON STRIKE</h1>
+            <button class="btn" onclick="startGame()">Initiate Combat</button>
+            <button class="btn" onclick="showPanel('rules-panel')">Operational Intel</button>
+            <button class="btn" onclick="showPanel('how-to-panel')">Field Manual</button>
+            <button class="btn" onclick="showPanel('settings-panel')">Systems Config</button>
+        </div>
+
+        <div class="menu-card hidden" id="rules-panel">
+            <h2>OPERATIONAL INTEL</h2>
+            <div class="text-left">
+                <ul>
+                    <li><strong>Fleet Size:</strong> Both sides command 5 vessels of varying lengths (2 to 5 units).</li>
+                    <li><strong>Turn Protocol:</strong> Combat is turn-based. One volley per turn.</li>
+                    <li><strong>Objective:</strong> Total neutralization of the enemy fleet.</li>
+                    <li><strong>The AI:</strong> The enemy uses adaptive logic. Every successful hit increases its tracking efficiency.</li>
+                </ul>
+            </div>
+            <button class="btn btn-small" onclick="showPanel('main-menu')">Return to Command</button>
+        </div>
+
+        <div class="menu-card hidden" id="how-to-panel">
+            <h2>FIELD MANUAL</h2>
+            <div class="text-left">
+                <p><strong>1. Deployment:</strong> Your fleet is automatically deployed in tactical positions on the left grid.</p>
+                <p><strong>2. Engagement:</strong> Click any coordinate on the <strong>Enemy Territory</strong> (right grid) to fire a kinetic strike.</p>
+                <p><strong>3. Indicators:</strong>
+                    <ul>
+                        <li><span style="color:var(--hit)">●</span> <strong>Red:</strong> Direct Hit.</li>
+                        <li><span style="color:var(--miss)">●</span> <strong>Grey:</strong> Missed Strike.</li>
+                    </ul>
+                </p>
+                <p><strong>4. AI Warning:</strong> Avoid clustering ships. The AI tracks hit patterns and will "sweep" areas adjacent to a confirmed strike.</p>
+            </div>
+            <button class="btn btn-small" onclick="showPanel('main-menu')">Return to Command</button>
+        </div>
+
+        <div class="menu-card hidden" id="settings-panel">
+            <h2>SYSTEM CONFIG</h2>
+            <div style="margin: 20px 0; display: flex; justify-content: space-between; align-items: center;">
+                <span>AI Targeting:</span>
+                <select id="difficulty-select" style="background: #0a0e14; color: var(--accent); border: 1px solid var(--accent); padding: 5px;">
+                    <option value="adaptive">Neural (Smarter)</option>
+                    <option value="easy">Linear (Random)</option>
+                </select>
+            </div>
+            <button class="btn btn-small" onclick="showPanel('main-menu')">Save & Return</button>
+        </div>
+    </div>
+
+    <div id="game-container">
+        <div class="status-bar">
+            <div>SYSTEM: <span id="game-status" style="color:var(--accent)">ONLINE</span></div>
+            <div style="font-size: 0.85rem; color: var(--text-dim)" id="game-log">Awaiting first strike...</div>
+        </div>
+
+        <div class="boards-wrapper">
+            <div class="board-container">
+                <p style="letter-spacing: 2px; font-size: 0.8rem; margin-bottom: 10px;">MY FLEET</p>
+                <div id="player-board" class="grid"></div>
+            </div>
+            <div class="board-container">
+                <p style="letter-spacing: 2px; font-size: 0.8rem; margin-bottom: 10px;">ENEMY TERRITORY</p>
+                <div id="cpu-board" class="grid"></div>
+            </div>
+        </div>
+        
+        <button class="btn" style="width: 200px; margin-top: 40px; font-size: 0.8rem;" onclick="location.reload()">Abort Mission</button>
+    </div>
+
+    <script>
+        const GRID_SIZE = 10;
+        const SHIPS = [5, 4, 3, 3, 2];
+        let playerBoard = [], cpuBoard = [];
+        let gameActive = false;
+        let aiTargetStack = [];
+
+        function showPanel(panelId) {
+            document.querySelectorAll('.menu-card').forEach(p => p.classList.add('hidden'));
+            document.getElementById(panelId).classList.remove('hidden');
+        }
+
+        function startGame() {
+            document.getElementById('ui-overlay').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('ui-overlay').classList.add('hidden');
+                document.getElementById('game-container').style.display = 'flex';
+                initGame();
+            }, 400);
+        }
+
+        function initGame() {
+            const pGrid = document.getElementById('player-board');
+            const cGrid = document.getElementById('cpu-board');
+            pGrid.innerHTML = ''; cGrid.innerHTML = '';
+            
+            playerBoard = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
+            cpuBoard = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
+
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const pCell = document.createElement('div');
+                    pCell.className = 'cell'; pCell.dataset.r = r; pCell.dataset.c = c;
+                    pGrid.appendChild(pCell);
+
+                    const cCell = document.createElement('div');
+                    cCell.className = 'cell'; cCell.dataset.r = r; cCell.dataset.c = c;
+                    cCell.onclick = () => playerShoot(r, c);
+                    cGrid.appendChild(cCell);
+                }
+            }
+            autoPlaceShips(playerBoard, 'player');
+            autoPlaceShips(cpuBoard, 'cpu');
+            gameActive = true;
+        }
+
+        function autoPlaceShips(board, type) {
+            SHIPS.forEach(size => {
+                let placed = false;
+                while (!placed) {
+                    let isVert = Math.random() > 0.5;
+                    let r = Math.floor(Math.random() * (isVert ? GRID_SIZE - size : GRID_SIZE));
+                    let c = Math.floor(Math.random() * (isVert ? GRID_SIZE : GRID_SIZE - size));
+                    if (canPlace(board, r, c, size, isVert)) {
+                        for (let i = 0; i < size; i++) {
+                            let cr = isVert ? r + i : r, cc = isVert ? c : c + i;
+                            board[cr][cc] = 1;
+                            if (type === 'player') document.querySelector(`#player-board [data-r="${cr}"][data-c="${cc}"]`).classList.add('ship');
+                        }
+                        placed = true;
+                    }
+                }
+            });
+        }
+
+        function canPlace(board, r, c, size, isVert) {
+            for (let i = 0; i < size; i++) {
+                let cr = isVert ? r + i : r, cc = isVert ? c : c + i;
+                if (board[cr][cc] !== 0) return false;
+            }
+            return true;
+        }
+
+        function playerShoot(r, c) {
+            if (!gameActive || cpuBoard[r][c] > 1) return;
+            const cell = document.querySelector(`#cpu-board [data-r="${r}"][data-c="${c}"]`);
+            if (cpuBoard[r][c] === 1) {
+                cell.classList.add('hit'); cpuBoard[r][c] = 3;
+                updateStatus("STRIKE!", "Enemy vessel sustained damage.");
+            } else {
+                cell.classList.add('miss'); cpuBoard[r][c] = 2;
+                updateStatus("MISS", "Kinetic round splashed.");
+            }
+            if (checkWin(cpuBoard)) return endGame("COMMAND: VICTORY ATTAINED");
+            gameActive = false;
+            setTimeout(cpuTurn, 700);
+        }
+
+        function cpuTurn() {
+            let r, c;
+            const smartMode = document.getElementById('difficulty-select').value === 'adaptive';
+            if (smartMode && aiTargetStack.length > 0) {
+                let target = aiTargetStack.pop();
+                r = target.r; c = target.c;
+            } else {
+                do { r = Math.floor(Math.random() * GRID_SIZE); c = Math.floor(Math.random() * GRID_SIZE); } 
+                while (playerBoard[r][c] > 1);
+            }
+
+            const cell = document.querySelector(`#player-board [data-r="${r}"][data-c="${c}"]`);
+            if (playerBoard[r][c] === 1) {
+                cell.classList.add('hit'); playerBoard[r][c] = 3;
+                if (smartMode) {
+                    [[r-1,c], [r+1,c], [r,c-1], [r,c+1]].forEach(([nr, nc]) => {
+                        if (nr>=0 && nr<GRID_SIZE && nc>=0 && nc<GRID_SIZE && playerBoard[nr][nc] < 2) aiTargetStack.push({r:nr, c:nc});
+                    });
+                }
+                updateStatus("ALERT", "Hull integrity compromised at " + r + "," + c);
+            } else {
+                cell.classList.add('miss'); playerBoard[r][c] = 2;
+                updateStatus("EVASIVE", "Enemy fire missed coordinates.");
+            }
+            if (checkWin(playerBoard)) return endGame("COMMAND: MISSION FAILURE");
+            gameActive = true;
+        }
+
+        function checkWin(board) { return !board.flat().some(cell => cell === 1); }
+        function updateStatus(stat, log) {
+            document.getElementById('game-status').innerText = stat;
+            document.getElementById('game-log').innerText = log;
+        }
+        function endGame(msg) { alert(msg); location.reload(); }
+    </script>
+</body>
+</html>
