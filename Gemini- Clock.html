@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chronos Max: The Temporal Dashboard</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --glass: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text: #f8fafc;
+            --accent: #38bdf8;
+            --accent-glow: rgba(56, 189, 248, 0.4);
+            --card-bg: #1e293b;
+            --font: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        [data-theme="light"] {
+            --bg: #f1f5f9;
+            --glass: rgba(255, 255, 255, 0.7);
+            --glass-border: rgba(0, 0, 0, 0.05);
+            --text: #0f172a;
+            --accent: #0284c7;
+            --accent-glow: rgba(2, 132, 199, 0.2);
+            --card-bg: #ffffff;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: var(--font); transition: background 0.5s, color 0.5s, transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+
+        body {
+            min-height: 100vh;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+            overflow-x: hidden;
+        }
+
+        /* --- GLOWING FLIP CLOCK --- */
+        .main-clock {
+            display: flex;
+            gap: 20px;
+            margin: 40px 0;
+            perspective: 1000px;
+        }
+
+        .flip-unit { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+
+        .card {
+            position: relative;
+            width: 120px;
+            height: 160px;
+            background: var(--card-bg);
+            border-radius: 16px;
+            font-size: 6rem;
+            font-weight: 900;
+            line-height: 160px;
+            text-align: center;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+            border: 1px solid var(--glass-border);
+            color: var(--accent);
+            text-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 50%; left: 0; width: 100%; height: 1px;
+            background: rgba(0,0,0,0.3);
+            z-index: 10;
+        }
+
+        /* --- DASHBOARD LAYOUT --- */
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 25px;
+            width: 100%;
+            max-width: 1400px;
+            margin-bottom: 100px;
+        }
+
+        .tile {
+            background: var(--glass);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 28px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .tile:hover { transform: translateY(-8px); border-color: var(--accent); }
+
+        .tile h3 { font-size: 1.1rem; margin-bottom: 20px; opacity: 0.8; display: flex; align-items: center; gap: 10px; }
+
+        /* --- PROGRESS BARS --- */
+        .progress-container { margin-bottom: 15px; }
+        .progress-label { display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 5px; }
+        .bar-bg { width: 100%; height: 8px; background: rgba(120,120,120,0.1); border-radius: 10px; overflow: hidden; }
+        .bar-fill { height: 100%; background: var(--accent); width: 0%; transition: width 1s ease-in-out; box-shadow: 0 0 10px var(--accent-glow); }
+
+        /* --- TIME GAME --- */
+        #game-area { text-align: center; }
+        .game-btn { width: 100px; height: 100px; border-radius: 50%; border: none; background: var(--accent); color: white; font-weight: bold; cursor: pointer; font-size: 1rem; margin: 10px; }
+        .game-feedback { font-weight: bold; color: var(--accent); margin-top: 10px; min-height: 1.2em; }
+
+        /* --- QUOTES & FACTS --- */
+        .fade-text { font-style: italic; font-size: 1.1rem; line-height: 1.6; min-height: 80px; }
+
+        /* --- BUTTONS --- */
+        .btn {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 15px var(--accent-glow);
+        }
+        .btn:active { transform: scale(0.95); }
+
+        /* --- NAV PILL --- */
+        .nav-dock {
+            position: fixed;
+            bottom: 30px;
+            background: var(--glass);
+            backdrop-filter: blur(30px);
+            border: 1px solid var(--glass-border);
+            padding: 15px 40px;
+            border-radius: 50px;
+            display: flex;
+            gap: 40px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            z-index: 1000;
+        }
+        .nav-icon { font-size: 1.5rem; cursor: pointer; filter: grayscale(1); transition: 0.3s; }
+        .nav-icon:hover { filter: grayscale(0); transform: scale(1.3); }
+
+        .theme-toggle { position: fixed; top: 25px; right: 25px; font-size: 1.5rem; cursor: pointer; background: var(--glass); border: 1px solid var(--glass-border); padding: 12px; border-radius: 50%; z-index: 2000; }
+
+        @media (max-width: 700px) {
+            .card { width: 80px; height: 110px; font-size: 3.5rem; line-height: 110px; }
+            .dashboard { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body data-theme="dark">
+
+    <div class="theme-toggle" onclick="toggleTheme()">🌓</div>
+
+    <div class="main-clock">
+        <div class="flip-unit"><div class="card" id="h-card">00</div><span style="opacity:0.5; font-size:0.7rem">HOURS</span></div>
+        <div class="flip-unit"><div class="card" id="m-card">00</div><span style="opacity:0.5; font-size:0.7rem">MINUTES</span></div>
+        <div class="flip-unit"><div class="card" id="s-card">00</div><span style="opacity:0.5; font-size:0.7rem">SECONDS</span></div>
+    </div>
+
+    <div class="dashboard">
+        <div class="tile">
+            <h3>📊 Temporal Progress</h3>
+            <div class="progress-container">
+                <div class="progress-label"><span>Day Progress</span><span id="day-perc">0%</span></div>
+                <div class="bar-bg"><div class="bar-fill" id="day-bar"></div></div>
+            </div>
+            <div class="progress-container">
+                <div class="progress-label"><span>Year Progress</span><span id="year-perc">0%</span></div>
+                <div class="bar-bg"><div class="bar-fill" id="year-bar"></div></div>
+            </div>
+            <p style="font-size: 0.8rem; margin-top: 10px; opacity: 0.6;">Time is the only currency you can't earn back.</p>
+        </div>
+
+        <div class="tile">
+            <h3>🎮 Beat The Clock</h3>
+            <div id="game-area">
+                <p style="font-size: 0.9rem; margin-bottom: 15px;">Close your eyes and click STOP exactly at 5.00 seconds!</p>
+                <button class="game-btn" id="game-trigger" onmousedown="startGame()" onmouseup="stopGame()">START</button>
+                <div class="game-feedback" id="game-result">Ready?</div>
+            </div>
+        </div>
+
+        <div class="tile">
+            <h3>⏱️ Pro Stopwatch</h3>
+            <div style="font-size: 2.5rem; font-weight: 800; text-align: center; color: var(--accent);" id="sw-display">00:00:00<small style="font-size: 1rem; opacity: 0.5;">.000</small></div>
+            <div style="display: flex; gap: 10px; margin-top: 15px; justify-content: center;">
+                <button class="btn" onclick="toggleSW()">Start/Stop</button>
+                <button class="btn" style="background: rgba(120,120,120,0.2);" onclick="lapSW()">Lap</button>
+            </div>
+            <div id="laps" style="max-height: 100px; overflow-y: auto; margin-top: 15px; font-size: 0.8rem;"></div>
+        </div>
+
+        <div class="tile">
+            <h3>🌙 Lunar Cycle</h3>
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <div>
+                    <h4 id="moon-phase-name">Waxing Gibbous</h4>
+                    <p style="opacity: 0.6; font-size: 0.8rem;">Illumination: <span id="moon-illum">84%</span></p>
+                </div>
+                <div id="moon-icon" style="font-size: 3rem;">🌔</div>
+            </div>
+        </div>
+
+        <div class="tile">
+            <h3>📜 Timeless Wisdom</h3>
+            <p class="fade-text" id="quote-text">"The two most powerful warriors are patience and time."</p>
+            <p style="text-align: right; font-weight: bold; opacity: 0.7;" id="quote-author">- Leo Tolstoy</p>
+        </div>
+
+        <div class="tile">
+            <h3>🌍 Global Pulse</h3>
+            <select id="world-tz" style="width: 100%; padding: 12px; border-radius: 10px; background: var(--card-bg); color: var(--text); border: none; margin-bottom: 15px;">
+                <option value="Asia/Tokyo">Tokyo, Japan</option>
+                <option value="Europe/Paris">Paris, France</option>
+                <option value="America/New_York">New York, USA</option>
+                <option value="Asia/Kolkata">Mumbai, India</option>
+            </select>
+            <div id="world-time-display" style="font-size: 2rem; font-weight: bold; text-align: center;">00:00:00</div>
+        </div>
+    </div>
+
+    <nav class="nav-dock">
+        <div class="nav-icon">📅</div>
+        <div class="nav-icon">🧘</div>
+        <div class="nav-icon">🚀</div>
+        <div class="nav-icon">⚙️</div>
+    </nav>
+
+    <script>
+        // --- AUDIO ENGINE ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSfx(freq, type, dur) {
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.type = type; osc.frequency.value = freq;
+            g.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + dur);
+        }
+
+        // --- CORE CLOCK & PROGRESS ---
+        function updateAll() {
+            const now = new Date();
+            
+            // Flip Clock
+            updateCard('h-card', String(now.getHours()).padStart(2, '0'));
+            updateCard('m-card', String(now.getMinutes()).padStart(2, '0'));
+            updateCard('s-card', String(now.getSeconds()).padStart(2, '0'));
+
+            // Day Progress
+            const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const dayProgress = ((now - startOfDay) / 86400000) * 100;
+            document.getElementById('day-bar').style.width = dayProgress + '%';
+            document.getElementById('day-perc').innerText = dayProgress.toFixed(1) + '%';
+
+            // Year Progress
+            const startOfYear = new Date(now.getFullYear(), 0, 1);
+            const yearProgress = ((now - startOfYear) / (365 * 24 * 60 * 60 * 1000)) * 100;
+            document.getElementById('year-bar').style.width = yearProgress + '%';
+            document.getElementById('year-perc').innerText = yearProgress.toFixed(2) + '%';
+
+            // World Clock
+            const tz = document.getElementById('world-tz').value;
+            document.getElementById('world-time-display').innerText = now.toLocaleTimeString('en-GB', {timeZone: tz});
+        }
+
+        function updateCard(id, val) {
+            const el = document.getElementById(id);
+            if(el.innerText !== val) {
+                el.style.transform = "rotateX(90deg)";
+                setTimeout(() => {
+                    el.innerText = val;
+                    el.style.transform = "rotateX(0deg)";
+                    playSfx(150, 'sine', 0.1);
+                }, 150);
+            }
+        }
+        setInterval(updateAll, 1000);
+
+        // --- TIME GAME ---
+        let gameStart;
+        function startGame() {
+            gameStart = Date.now();
+            document.getElementById('game-trigger').innerText = "HOLDING";
+            document.getElementById('game-result').innerText = "Focus...";
+            playSfx(440, 'sine', 0.1);
+        }
+        function stopGame() {
+            const duration = (Date.now() - gameStart) / 1000;
+            const diff = Math.abs(5 - duration).toFixed(3);
+            document.getElementById('game-trigger').innerText = "START";
+            document.getElementById('game-result').innerText = `You stopped at ${duration}s (Diff: ${diff}s)`;
+            playSfx(diff < 0.2 ? 880 : 220, 'square', 0.3);
+        }
+
+        // --- STOPWATCH ---
+        let swOn = false, swStart, swInt;
+        function toggleSW() {
+            if(!swOn) {
+                swStart = Date.now();
+                swInt = setInterval(() => {
+                    const d = new Date(Date.now() - swStart);
+                    document.getElementById('sw-display').innerHTML = `${String(d.getUTCMinutes()).padStart(2,'0')}:${String(d.getUTCSeconds()).padStart(2,'0')}:${String(Math.floor(d.getUTCMilliseconds()/10)).padStart(2,'0')}<small style="font-size:1rem">.ms</small>`;
+                }, 10);
+                swOn = true;
+            } else {
+                clearInterval(swInt);
+                swOn = false;
+            }
+        }
+        function lapSW() {
+            const lap = document.createElement('div');
+            lap.innerText = `Lap: ${document.getElementById('sw-display').innerText}`;
+            document.getElementById('laps').prepend(lap);
+        }
+
+        // --- QUOTES ---
+        const quotes = [
+            {t: "Time is a created thing. To say 'I don't have time' is to say 'I don't want to'.", a: "Lao Tzu"},
+            {t: "The way we spend our time defines who we are.", a: "Jonathan Estrin"},
+            {t: "Time is the longest distance between two places.", a: "Tennessee Williams"}
+        ];
+        let qIdx = 0;
+        setInterval(() => {
+            qIdx = (qIdx + 1) % quotes.length;
+            document.getElementById('quote-text').innerText = `"${quotes[qIdx].t}"`;
+            document.getElementById('quote-author').innerText = `- ${quotes[qIdx].a}`;
+        }, 10000);
+
+        // --- THEME ---
+        function toggleTheme() {
+            const b = document.body;
+            b.setAttribute('data-theme', b.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+            playSfx(600, 'sine', 0.2);
+        }
+
+        updateAll();
+    </script>
+</body>
+</html>
